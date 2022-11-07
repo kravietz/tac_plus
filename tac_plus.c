@@ -24,10 +24,8 @@
 
 #include "version.h"
 #include "tac_plus.h"
-#include <grp.h>
 #include <netinet/tcp.h>
 #include <poll.h>
-#include <pwd.h>
 #include <sys/wait.h>
 #include <signal.h>
 
@@ -58,8 +56,6 @@ int single;			/* single thread (for debugging) */
 int opt_G;			/* foreground */
 int opt_S;			/* enable single-connection */
 int wtmpfd;			/* for wtmp file logging */
-char *opt_Q;
-char *opt_U;
 char *wtmpfile = NULL;
 char *bind_address = NULL;
 
@@ -123,7 +119,7 @@ handler(int signum)
 {
     /* report() is not reentrant-safe */
 #define RCVSIG_STR "Received signal\n"
-    (void)write(fileno(stderr), RCVSIG_STR, strlen(RCVSIG_STR));
+    write(fileno(stderr), RCVSIG_STR, strlen(RCVSIG_STR));
     reinitialize = 1;
 #ifdef REARMSIGNAL
     signal(SIGUSR1, handler);
@@ -166,6 +162,7 @@ get_socket(int **sa, int *nsa)
 {
     char	host[NI_MAXHOST], serv[NI_MAXHOST];
     struct addrinfo hint, *res, *rp;
+    u_long	inaddr;
     int		ecode,
 		flag,
 		kalive = 1,
@@ -273,13 +270,8 @@ main(int argc, char **argv)
 {
     extern char *optarg;
     FILE *fp;
-    int	c, *s, ns, somaxconn;
+    int	c, *s, ns;
     struct pollfd *pfds;
-
-#ifndef SOMAXCONN
-# define SOMAXCONN 64
-#endif
-    somaxconn = SOMAXCONN;
 
 #if PROFILE
     moncontrol(0);
@@ -301,7 +293,7 @@ main(int argc, char **argv)
 	tac_exit(1);
     }
 
-    while ((c = getopt(argc, argv, "B:C:d:hiPp:Q:tGgvSsLl:m:w:U:u:")) != EOF)
+    while ((c = getopt(argc, argv, "B:C:d:hiPp:tGgvSsLl:w:u:")) != EOF)
 	switch (c) {
 	case 'B':		/* bind() address*/
 	    bind_address = optarg;
@@ -346,12 +338,6 @@ main(int argc, char **argv)
 	case 'l':		/* logfile */
 	    logfile = tac_strdup(optarg);
 	    break;
-	case 'm':		/* SOMAXCONN */
-	    somaxconn = atoi(optarg);
-	    break;
-	case 'Q':		/* setgid */
-	    opt_Q = tac_strdup(optarg);
-	    break;
 	case 'S':		/* enable single-connection */
 	    opt_S = 1;
 	    break;
@@ -360,9 +346,6 @@ main(int argc, char **argv)
 	    wholog = tac_strdup(optarg);
 	    break;
 #endif
-	case 'U':		/* setuid */
-	    opt_U = tac_strdup(optarg);
-	    break;
 	case 'u':
 	    wtmpfile = tac_strdup(optarg);
 	    break;
@@ -407,8 +390,8 @@ main(int argc, char **argv)
 		on = 0;
 	    else
 		on = NI_NUMERICHOST;
-	    if (getnameinfo((struct sockaddr *)&name, name_len, host,
-			    NI_MAXHOST, NULL, 0, on)) {
+	    if (getnameinfo((struct sockaddr *)&name, name_len, host, 128,
+			    NULL, 0, on)) {
 		strncpy(host, "unknown", NI_MAXHOST - 1);
 		host[NI_MAXHOST - 1] = '\0';
 	    }
@@ -420,7 +403,7 @@ main(int argc, char **argv)
 	    if (session.peerip)
 		free(session.peerip);
 	    session.peerip = tac_strdup((char *)inet_ntop(name.sin_family,
-					&name.sin_addr, host, NI_MAXHOST));
+					&name.sin_addr, host, name_len));
 	    if (debug & DEBUG_AUTHEN_FLAG)
 		report(LOG_INFO, "session.peerip is %s", session.peerip);
 	}
@@ -518,8 +501,12 @@ main(int argc, char **argv)
 
     get_socket(&s, &ns);
 
+#ifndef SOMAXCONN
+#define SOMAXCONN 5
+#endif
+
     for (c = 0; c < ns; c++) {
-	if (listen(s[c], somaxconn) < 0) {
+	if (listen(s[c], SOMAXCONN) < 0) {
 	    console = 1;
 	    report(LOG_ERR, "listen: %s", strerror(errno));
 	    tac_exit(1);
@@ -563,35 +550,14 @@ main(int argc, char **argv)
 	    childpid = 0;
 	}
     }
-
-    if (opt_Q) {
-	struct group *gr;
-	if ((gr = getgrnam(opt_Q)) == NULL) {
-	    report(LOG_ERR, "Could set groupid to %s: %s", opt_Q,
-		   strerror(errno));
-        } else if (setgid(gr->gr_gid)) {
-	    report(LOG_ERR, "Cannot set group id to %d %s",
-		   gr->gr_gid, strerror(errno));
-	}
-    }
 #ifdef TACPLUS_GROUPID
-      else if (setgid(TACPLUS_GROUPID))
+    if (setgid(TACPLUS_GROUPID))
 	report(LOG_ERR, "Cannot set group id to %d %s",
 	       TACPLUS_GROUPID, strerror(errno));
 #endif
 
-    if (opt_U) {
-	struct passwd *pw;
-	if ((pw = getpwnam(opt_U)) == NULL) {
-	    report(LOG_ERR, "Could not find username %s: %s", opt_U,
-		   strerror(errno));
-	} else if (setuid(pw->pw_uid)) {
-		report(LOG_ERR, "Cannot set user id to %d %s",
-		       pw->pw_uid, strerror(errno));
-	}
-    }
 #ifdef TACPLUS_USERID
-      else if (setuid(TACPLUS_USERID))
+    if (setuid(TACPLUS_USERID))
 	report(LOG_ERR, "Cannot set user id to %d %s",
 	       TACPLUS_USERID, strerror(errno));
 #endif
@@ -622,8 +588,8 @@ main(int argc, char **argv)
 	char host[NI_MAXHOST];
 	struct sockaddr_in from;
 	socklen_t from_len;
-	int newsockfd = -1;
-	int flags, status;
+	int newsockfd, status;
+	int flags;
 
 	if (reinitialize)
 	    init();
@@ -658,8 +624,8 @@ main(int argc, char **argv)
 	    flags = 0;
 	else
 	    flags = NI_NUMERICHOST;
-	if (getnameinfo((struct sockaddr *)&from, from_len, host, NI_MAXHOST,
-			NULL, 0, flags)) {
+	if (getnameinfo((struct sockaddr *)&from, from_len, host, 128, NULL, 0,
+			flags)) {
 	    strncpy(host, "unknown", NI_MAXHOST - 1);
 	    host[NI_MAXHOST - 1] = '\0';
 	}
@@ -672,7 +638,7 @@ main(int argc, char **argv)
 	if (session.peerip)
 	    free(session.peerip);
 	session.peerip = tac_strdup((char *)inet_ntop(from.sin_family,
-				    &from.sin_addr, host, NI_MAXHOST));
+				    &from.sin_addr, host, from_len));
 	if (debug & DEBUG_PACKET_FLAG)
 	    report(LOG_DEBUG, "session request from %s sock=%d",
 		   session.peer, newsockfd);
@@ -834,8 +800,6 @@ usage(void)
 		" [-d <debug level>]"
 		" [-l <logfile>]"
 		" [-p <port>]"
-		" [-Q <setgid groupname>]"
-		" [-U <setuid username>]"
 		" [-u <wtmpfile>]"
 #ifdef MAXSESS
 		" [-w <whologfile>]"

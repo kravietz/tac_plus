@@ -37,6 +37,13 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
+    - name: Update APT repo
+      run: sudo apt update
+    - name: Install build dependencies
+      uses: mstksg/get-package@v1
+      with:
+        apt-get: libwrap0-dev
+        
     - name: Checkout repository
       uses: actions/checkout@v3
 

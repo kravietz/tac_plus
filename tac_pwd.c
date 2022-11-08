@@ -54,6 +54,7 @@
 
 #define SALTBUFLEN	24
 #define HASHBUFLEN	32
+#define	SHA512BUFLEN	128
 
 void	usage(void);
 
@@ -133,6 +134,21 @@ do_md5(char *passwd, char *salt)
     return hash;
 }
 
+char *
+do_sha512(char *passwd, char *salt)
+{
+    static char hash[SHA512BUFLEN];
+
+    if (salt == NULL)
+	salt = get_salt();
+    if (strlen(salt) > 2)
+	salt[2] = '\0';
+    snprintf(hash, SHA512BUFLEN, "$6$%s$", salt);
+    strncpy(hash, crypt(passwd, hash), SHA512BUFLEN);
+
+    return hash;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -145,11 +161,16 @@ main(int argc, char **argv)
     char		*prompt = "Password to be encrypted: ";
     int			opt_e = 0,			/* do not echo passwd*/
 			opt_m = 0,			/* create md5 string */
+			opt_s = 1,			/* create sha512 str */
 			n;
     struct termios	t;
 
-    while ((n = getopt(argc, argv, "ehm")) != EOF) {
+    while ((n = getopt(argc, argv, "dehm")) != EOF) {
 	switch (n) {
+	case 'd':
+	    opt_m = 0;
+	    opt_s = 0;
+	    break;
 	case 'e':
 	    opt_e = 1;
 	    break;
@@ -159,6 +180,7 @@ main(int argc, char **argv)
 	    break;
 	case 'm':
 	    opt_m = 1;
+	    opt_s = 0;
 	    break;
 	default:
 	    usage();
@@ -191,6 +213,8 @@ main(int argc, char **argv)
 
     if (opt_m) {
 	result = do_md5(pass, salt);
+    } else if (opt_s) {
+	result = do_sha512(pass, salt);
     } else {
 	result = do_des(pass, salt);
     }

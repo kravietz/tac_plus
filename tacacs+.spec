@@ -1,8 +1,8 @@
 Summary: TACACS+ Daemon
 Name: tacacs+
 Group: Networking/Servers
-Version: F4.0.4.19
-Release: 1.jw
+Version: F4.0.4.29
+Release: 2%{?dist}
 License: Cisco
 
 Packager: Bruce Carleton <bruce.carleton@jasperwireless.com>
@@ -11,8 +11,9 @@ Vendor: Cisco
 Source: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
-BuildRequires: gcc, bison, flex, m4, pam-devel
+BuildRequires: gcc, bison, flex, m4, pam-devel, tcp_wrappers-devel
 Requires: pam
+
 
 %description
 
@@ -29,7 +30,7 @@ Requires: pam
 
 # Define variables
 TACPLUS_PID=/var/run/tac_plus.pid
-TACPLUS_EXE=/usr/bin/tac_plus
+TACPLUS_EXE=/usr/sbin/tac_plus
 TACPLUS_ARG=""
 TACPLUS_CNF=/etc/tac_plus.conf
 
@@ -98,6 +99,8 @@ EOF
 %{__rm} -rf %{buildroot}
 %makeinstall
 %{__install} -Dp -m0755 tac_plus.sysvinit %{buildroot}%{_initrddir}/tac_plus
+%{__mkdir} %{buildroot}%{_sbindir}
+%{__mv} %{buildroot}%{_bindir}/tac_plus %{buildroot}%{_sbindir}
 ### Clean up buildroot
 %{__rm} -f %{buildroot}%{_infodir}/dir
 
@@ -110,21 +113,22 @@ EOF
 
 %files
 
-/usr/include/tacacs.h
-/usr/bin/tac_pwd
-/usr/bin/tac_plus
-/usr/share/tacacs+/users_guide
-/usr/share/tacacs+/tac_convert
-/usr/share/tacacs+/do_auth.py
-/usr/share/man/man5/tac_plus.conf.5.gz
-/usr/share/man/man8/tac_pwd.8.gz
-/usr/share/man/man8/tac_plus.8.gz
-/usr/share/man/man3/regexp.3.gz
-/usr/lib/libtacacs.so.1.0.0
-/usr/lib/libtacacs.so.1
-/usr/lib/libtacacs.so
-/usr/lib/libtacacs.a
-/usr/lib/libtacacs.la
-/etc/rc.d/init.d/tac_plus
+%{_includedir}/tacacs.h
+%{_bindir}/tac_pwd
+%{_sbindir}/tac_plus
+%{_datadir}/tacacs+/users_guide
+%{_datadir}/tacacs+/tac_convert
+%{_datadir}/tacacs+/do_auth.py
+%{_datadir}/tacacs+/do_auth.pyc
+%{_datadir}/tacacs+/do_auth.pyo
+%{_mandir}/man5/tac_plus.conf.5.gz
+%{_mandir}/man8/tac_pwd.8.gz
+%{_mandir}/man8/tac_plus.8.gz
+%{_libdir}/libtacacs.so.1.0.0
+%{_libdir}/libtacacs.so.1
+%{_libdir}/libtacacs.so
+%{_libdir}/libtacacs.a
+%{_libdir}/libtacacs.la
+%attr(0755,root,root) %{_initrddir}/tac_plus
 
 %changelog
